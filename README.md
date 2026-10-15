@@ -1,4 +1,4 @@
-# CloudFormation EC2 Security Group
+# CloudFormation Nested Stack -  EC2 Security Group
 
 <!-- Row 1: Status - Most Important -->
 [![Release](https://img.shields.io/github/v/release/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group?label=Release)](https://github.com/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group/releases)&nbsp;[![Release Workflow](https://github.com/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group/actions/workflows/release.yaml/badge.svg)](https://github.com/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group/actions/workflows/release.yaml)&nbsp;[![Issues](https://img.shields.io/github/issues/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group)](https://github.com/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group/issues)&nbsp;[![Last Commit](https://img.shields.io/github/last-commit/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group)](https://github.com/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group/commits)
@@ -14,6 +14,76 @@
 
 <!-- Row 5: Custom Metrics -->
 [![Custom Endpoint](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/bsubhamay/a512571f1782749bed95bfff876baded/raw/cfn-nested-aws-ec2-security-group.json)](https://gist.github.com/subhamay-bhattacharyya/a512571f1782749bed95bfff876baded)
+
+## EC2 Security Group Template (cloudformation/template.yaml)
+
+Creates an EC2 security group with up to five ingress rules. Each rule selects a named rule set and has its own source, either a CIDR block or another security group. Egress uses the default allow-all rule.
+
+### Parameters
+
+| Parameter | Type | Default | Description |
+| ----------- | ------ | --------- | ------------- |
+| `VpcId` | `AWS::EC2::VPC::Id` | — | VPC in which to create the security group |
+| `ProjectName` | String | — | Project name, the first part of the group name |
+| `Environment` | String | — | Environment: `devl`, `stag`, or `prod` |
+| `SecurityGroupBaseName` | String | — | Base name, the middle part of the group name |
+| `CiSuffix` | String | `""` | Optional suffix appended to the group name (CI deployments) |
+| `SecurityGroupDescription` | String | `""` | Description. Leave blank to generate one from the stack name and rule set |
+| `RuleNRuleSet` (N = 1–5) | String | — | Rule set for rule N, or `None` to skip the rule |
+| `RuleNSourceCidr` (N = 1–5) | String | `""` | CIDR block allowed to reach rule N (set this or the security group ID, not both) |
+| `RuleNSourceSecurityGroupId` (N = 1–5) | String | `""` | Security group ID allowed to reach rule N (set this or the CIDR, not both) |
+
+### Rule Sets
+
+Rule N is built from slot N of the rule set chosen for it.
+
+| Rule set | Rule 1 | Rule 2 | Rule 3 |
+| ----------- | ------ | ------ | ------ |
+| `WebServer` | tcp 80 | tcp 443 | — |
+| `SSHOnly` | tcp 22 | — | — |
+| `AppTier` | tcp 8000–8080 | tcp 9090 | — |
+| `Dev` | tcp 22 | tcp 80 | tcp 8000–8080 |
+| `RDSMySQL`, `AuroraMySQL` | tcp 3306 | — | — |
+| `AuroraPostgreSQL`, `RDSPostgreSQL` | tcp 5432 | — | — |
+| `RDSOracle` | tcp 1521 | — | — |
+| `RDSSQLServer` | tcp 1433 | — | — |
+
+Rules 4 and 5 are empty in every set.
+
+### Naming
+
+The security group is named:
+
+```bash
+{ProjectName}-{SecurityGroupBaseName}-{Environment}-{Region}
+```
+
+If `CiSuffix` is set, `-{CiSuffix}` is appended. The `Name` tag uses the same value.
+
+Each ingress rule has a `Description` such as `WebServer rule 1: tcp 80-80 from 10.0.0.0/16`, because ingress rules cannot carry tags in CloudFormation.
+
+### Deploy
+
+```bash
+aws cloudformation deploy \
+  --template-file cloudformation/template.yaml \
+  --stack-name web-sg-devl \
+  --parameter-overrides \
+    VpcId=vpc-0123456789abcdef0 \
+    ProjectName=myproject \
+    Environment=devl \
+    SecurityGroupBaseName=web \
+    Rule1RuleSet=WebServer \
+    Rule1SourceCidr=10.0.0.0/16 \
+    Rule2RuleSet=WebServer \
+    Rule2SourceCidr=10.0.0.0/16 \
+    Rule3RuleSet=None \
+    Rule4RuleSet=None \
+    Rule5RuleSet=None
+```
+
+Rule 2 must be set to `WebServer` as well to get the HTTPS port, because each rule reads its own slot.
+
 
 ---
 

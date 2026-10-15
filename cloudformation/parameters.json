@@ -1,5 +1,18 @@
 {
+  "ProjectName": "proj-ztc",
   "Environment": "devl",
-  "KmsKey": "SB-KMS",
+  "VpcId": "vpc-05f6659cbc124fe87",
+  "SecurityGroupBaseName": "test-sg",
+  "SecurityGroupDescription": "Test security group",
+  "Rule1RuleSet": "SSHOnly",
+  "Rule1SourceCidr": "0.0.0.0/0",
+  "Rule2RuleSet": "None",
+  "Rule2SourceCidr": "",
+  "Rule3RuleSet": "None",
+  "Rule3SourceCidr": "",
+  "Rule4RuleSet": "None",
+  "Rule4SourceCidr": "",
+  "Rule5RuleSet": "None",
+  "Rule5SourceCidr": "",
   "CiSuffix": ""
 }
