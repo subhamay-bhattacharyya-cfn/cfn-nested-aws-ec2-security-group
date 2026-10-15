@@ -1,4 +1,4 @@
-# CloudFormation Nested Stack -  EC2 Security Group
+# CloudFormation Nested Stack Template : Security Group.
 
 <!-- Row 1: Status - Most Important -->
 [![Release](https://img.shields.io/github/v/release/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group?label=Release)](https://github.com/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group/releases)&nbsp;[![Release Workflow](https://github.com/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group/actions/workflows/release.yaml/badge.svg)](https://github.com/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group/actions/workflows/release.yaml)&nbsp;[![Issues](https://img.shields.io/github/issues/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group)](https://github.com/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group/issues)&nbsp;[![Last Commit](https://img.shields.io/github/last-commit/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group)](https://github.com/subhamay-bhattacharyya-cfn/cfn-nested-aws-ec2-security-group/commits)
