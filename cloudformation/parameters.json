@@ -1,7 +1,7 @@
 {
   "ProjectName": "proj-ztc",
   "Environment": "devl",
-  "VpcId": "vpc-05f6659cbc124fe87",
+  "VpcId": "vpc-0512b6cf184f1a7c6",
   "SecurityGroupBaseName": "test-sg",
   "SecurityGroupDescription": "Test security group",
   "Rule1RuleSet": "SSHOnly",
