@@ -1,0 +1,298 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Creates an EC2 security group with up to five ingress rules selected from a named
+  rule set. Each ingress rule's source is either a CIDR block or another security group.
+  Egress uses the default allow-all rule.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC in which to create the security group
+
+  SecurityGroupName:
+    Type: String
+    Default: ""
+    Description: Security group name. Leave blank to use <stack-name>-sg.
+    MaxLength: 255
+    AllowedPattern: "^[a-zA-Z0-9 ._\\-:/()#,@\\[\\]+=&;{}!$*]*$"
+    ConstraintDescription: Use letters, numbers, spaces, and the symbols EC2 allows in security group names.
+
+  SecurityGroupDescription:
+    Type: String
+    Default: ""
+    Description: Security group description. Leave blank to generate one from the stack name and rule set.
+    MaxLength: 255
+
+  RuleSet:
+    Type: String
+    AllowedValues:
+      - WebServer
+      - SSHOnly
+      - AppTier
+      - Dev
+      - RDSMySQL
+      - AuroraMySQL
+      - AuroraPostgreSQL
+      - RDSOracle
+      - RDSSQLServer
+      - RDSPostgreSQL
+    Description: Named set of ingress rules to apply
+
+  SourceType:
+    Type: String
+    AllowedValues:
+      - Cidr
+      - SecurityGroup
+    Default: Cidr
+    Description: Whether ingress traffic is allowed from a CIDR block or from another security group
+
+  SourceCidr:
+    Type: String
+    Default: ""
+    Description: CIDR block allowed to reach the ports (used when SourceType is Cidr)
+    AllowedPattern: "^$|^(\\d{1,3}\\.){3}\\d{1,3}/\\d{1,2}$"
+    ConstraintDescription: Must be a valid IPv4 CIDR block such as 10.0.0.0/16
+
+  SourceSecurityGroupId:
+    Type: String
+    Default: ""
+    Description: Security group ID allowed to reach the ports (used when SourceType is SecurityGroup)
+    AllowedPattern: "^$|^sg-[0-9a-f]{8,17}$"
+    ConstraintDescription: Must be a security group ID such as sg-0123456789abcdef0
+
+Rules:
+  CidrSourceRequiresCidr:
+    RuleCondition: !Equals [!Ref SourceType, Cidr]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref SourceCidr, ""]]
+        AssertDescription: SourceCidr is required when SourceType is Cidr
+
+  SecurityGroupSourceRequiresId:
+    RuleCondition: !Equals [!Ref SourceType, SecurityGroup]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref SourceSecurityGroupId, ""]]
+        AssertDescription: SourceSecurityGroupId is required when SourceType is SecurityGroup
+
+Mappings:
+  # Each rule is "protocol,fromPort,toPort". Unused slots are "none".
+  # The traffic source is supplied by the SourceType parameters, not stored here.
+  IngressRuleSets:
+    WebServer:
+      Rule1: "tcp,80,80"
+      Rule2: "tcp,443,443"
+      Rule3: "none"
+      Rule4: "none"
+      Rule5: "none"
+    SSHOnly:
+      Rule1: "tcp,22,22"
+      Rule2: "none"
+      Rule3: "none"
+      Rule4: "none"
+      Rule5: "none"
+    AppTier:
+      Rule1: "tcp,8000,8080"
+      Rule2: "tcp,9090,9090"
+      Rule3: "none"
+      Rule4: "none"
+      Rule5: "none"
+    Dev:
+      Rule1: "tcp,22,22"
+      Rule2: "tcp,80,80"
+      Rule3: "tcp,8000,8080"
+      Rule4: "none"
+      Rule5: "none"
+    RDSMySQL:
+      Rule1: "tcp,3306,3306"
+      Rule2: "none"
+      Rule3: "none"
+      Rule4: "none"
+      Rule5: "none"
+    AuroraMySQL:
+      Rule1: "tcp,3306,3306"
+      Rule2: "none"
+      Rule3: "none"
+      Rule4: "none"
+      Rule5: "none"
+    AuroraPostgreSQL:
+      Rule1: "tcp,5432,5432"
+      Rule2: "none"
+      Rule3: "none"
+      Rule4: "none"
+      Rule5: "none"
+    RDSOracle:
+      Rule1: "tcp,1521,1521"
+      Rule2: "none"
+      Rule3: "none"
+      Rule4: "none"
+      Rule5: "none"
+    RDSSQLServer:
+      Rule1: "tcp,1433,1433"
+      Rule2: "none"
+      Rule3: "none"
+      Rule4: "none"
+      Rule5: "none"
+    RDSPostgreSQL:
+      Rule1: "tcp,5432,5432"
+      Rule2: "none"
+      Rule3: "none"
+      Rule4: "none"
+      Rule5: "none"
+
+Conditions:
+  HasSecurityGroupName: !Not [!Equals [!Ref SecurityGroupName, ""]]
+  HasSecurityGroupDescription: !Not [!Equals [!Ref SecurityGroupDescription, ""]]
+
+  UseCidrSource: !Equals [!Ref SourceType, Cidr]
+  UseSecurityGroupSource: !Equals [!Ref SourceType, SecurityGroup]
+
+  HasRule1: !Not [!Equals [!FindInMap [IngressRuleSets, !Ref RuleSet, Rule1], "none"]]
+  HasRule2: !Not [!Equals [!FindInMap [IngressRuleSets, !Ref RuleSet, Rule2], "none"]]
+  HasRule3: !Not [!Equals [!FindInMap [IngressRuleSets, !Ref RuleSet, Rule3], "none"]]
+  HasRule4: !Not [!Equals [!FindInMap [IngressRuleSets, !Ref RuleSet, Rule4], "none"]]
+  HasRule5: !Not [!Equals [!FindInMap [IngressRuleSets, !Ref RuleSet, Rule5], "none"]]
+  HasRule1Cidr: !And [!Condition HasRule1, !Condition UseCidrSource]
+  HasRule1SecurityGroup: !And [!Condition HasRule1, !Condition UseSecurityGroupSource]
+  HasRule2Cidr: !And [!Condition HasRule2, !Condition UseCidrSource]
+  HasRule2SecurityGroup: !And [!Condition HasRule2, !Condition UseSecurityGroupSource]
+  HasRule3Cidr: !And [!Condition HasRule3, !Condition UseCidrSource]
+  HasRule3SecurityGroup: !And [!Condition HasRule3, !Condition UseSecurityGroupSource]
+  HasRule4Cidr: !And [!Condition HasRule4, !Condition UseCidrSource]
+  HasRule4SecurityGroup: !And [!Condition HasRule4, !Condition UseSecurityGroupSource]
+  HasRule5Cidr: !And [!Condition HasRule5, !Condition UseCidrSource]
+  HasRule5SecurityGroup: !And [!Condition HasRule5, !Condition UseSecurityGroupSource]
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !If
+        - HasSecurityGroupName
+        - !Ref SecurityGroupName
+        - !Sub "${AWS::StackName}-sg"
+      GroupDescription: !If
+        - HasSecurityGroupDescription
+        - !Ref SecurityGroupDescription
+        - !Sub "Security group for ${AWS::StackName} (${RuleSet} rule set)"
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: !If
+            - HasSecurityGroupName
+            - !Ref SecurityGroupName
+            - !Sub "${AWS::StackName}-sg"
+        - Key: RuleSet
+          Value: !Ref RuleSet
+
+  IngressRule1Cidr:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasRule1Cidr
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: !Select [0, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule1]]]
+      FromPort: !Select [1, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule1]]]
+      ToPort: !Select [2, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule1]]]
+      CidrIp: !Ref SourceCidr
+
+  IngressRule1SecurityGroup:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasRule1SecurityGroup
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: !Select [0, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule1]]]
+      FromPort: !Select [1, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule1]]]
+      ToPort: !Select [2, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule1]]]
+      SourceSecurityGroupId: !Ref SourceSecurityGroupId
+
+  IngressRule2Cidr:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasRule2Cidr
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: !Select [0, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule2]]]
+      FromPort: !Select [1, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule2]]]
+      ToPort: !Select [2, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule2]]]
+      CidrIp: !Ref SourceCidr
+
+  IngressRule2SecurityGroup:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasRule2SecurityGroup
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: !Select [0, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule2]]]
+      FromPort: !Select [1, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule2]]]
+      ToPort: !Select [2, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule2]]]
+      SourceSecurityGroupId: !Ref SourceSecurityGroupId
+
+  IngressRule3Cidr:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasRule3Cidr
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: !Select [0, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule3]]]
+      FromPort: !Select [1, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule3]]]
+      ToPort: !Select [2, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule3]]]
+      CidrIp: !Ref SourceCidr
+
+  IngressRule3SecurityGroup:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasRule3SecurityGroup
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: !Select [0, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule3]]]
+      FromPort: !Select [1, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule3]]]
+      ToPort: !Select [2, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule3]]]
+      SourceSecurityGroupId: !Ref SourceSecurityGroupId
+
+  IngressRule4Cidr:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasRule4Cidr
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: !Select [0, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule4]]]
+      FromPort: !Select [1, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule4]]]
+      ToPort: !Select [2, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule4]]]
+      CidrIp: !Ref SourceCidr
+
+  IngressRule4SecurityGroup:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasRule4SecurityGroup
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: !Select [0, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule4]]]
+      FromPort: !Select [1, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule4]]]
+      ToPort: !Select [2, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule4]]]
+      SourceSecurityGroupId: !Ref SourceSecurityGroupId
+
+  IngressRule5Cidr:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasRule5Cidr
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: !Select [0, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule5]]]
+      FromPort: !Select [1, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule5]]]
+      ToPort: !Select [2, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule5]]]
+      CidrIp: !Ref SourceCidr
+
+  IngressRule5SecurityGroup:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasRule5SecurityGroup
+    Properties:
+      GroupId: !Ref SecurityGroup
+      IpProtocol: !Select [0, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule5]]]
+      FromPort: !Select [1, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule5]]]
+      ToPort: !Select [2, !Split [",", !FindInMap [IngressRuleSets, !Ref RuleSet, Rule5]]]
+      SourceSecurityGroupId: !Ref SourceSecurityGroupId
+
+Outputs:
+  SecurityGroupId:
+    Description: ID of the security group
+    Value: !Ref SecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-SecurityGroupId"
+
+  SecurityGroupName:
+    Description: Name of the security group
+    Value: !If
+      - HasSecurityGroupName
+      - !Ref SecurityGroupName
+      - !Sub "${AWS::StackName}-sg"
