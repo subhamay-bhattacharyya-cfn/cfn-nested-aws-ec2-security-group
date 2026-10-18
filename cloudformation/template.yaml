@@ -615,8 +615,6 @@ Outputs:
   SecurityGroupId:
     Description: ID of the security group
     Value: !Ref SecurityGroup
-    Export:
-      Name: !Sub "${AWS::StackName}-SecurityGroupId"
 
   SecurityGroupName:
     Description: Name of the security group

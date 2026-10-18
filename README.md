@@ -15,54 +15,94 @@
 <!-- Row 5: Custom Metrics -->
 [![Custom Endpoint](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/bsubhamay/a512571f1782749bed95bfff876baded/raw/cfn-nested-aws-ec2-security-group.json)](https://gist.github.com/subhamay-bhattacharyya/a512571f1782749bed95bfff876baded)
 
-## EC2 Security Group Template (cloudformation/template.yaml)
+---
 
-Creates an EC2 security group with up to five ingress rules. Each rule selects a named rule set and has its own source, either a CIDR block or another security group. Egress uses the default allow-all rule.
+This repository contains a reusable CloudFormation template, `cloudformation/template.yaml`, that creates an EC2 security group with up to five ingress rules. Each rule picks a named rule set and has its own source. The template is designed to be used as a nested stack from a parent stack, or deployed directly.
 
-### Parameters
+## Overview
+
+The stack creates:
+
+- One `AWS::EC2::SecurityGroup` in the VPC you supply
+- Up to five `AWS::EC2::SecurityGroupIngress` rules, one per rule slot
+- Default allow-all egress, as provided by EC2
+
+Each ingress rule is created only when its rule set has a port defined for that slot, and its source is set. Rules and sources are independent, so you can mix CIDR and security group sources in one group.
+
+## Repository Layout
+
+```text
+cloudformation/
+├── template.yaml        # The security group stack template
+├── parameters.json      # Parameter values used by CI
+└── stack-config.json    # Stack name, template file, and parameter file used by CI
+
+.github/workflows/       # CI, release, and automation workflows
+.env/environments.yaml   # GitHub environments (ci, devl) and region (us-east-1)
+```
+
+## Parameters
 
 | Parameter | Type | Default | Description |
 | ----------- | ------ | --------- | ------------- |
-| `VpcId` | `AWS::EC2::VPC::Id` | — | VPC in which to create the security group |
-| `ProjectName` | String | — | Project name, the first part of the group name |
-| `Environment` | String | — | Environment: `devl`, `stag`, or `prod` |
-| `SecurityGroupBaseName` | String | — | Base name, the middle part of the group name |
-| `CiSuffix` | String | `""` | Optional suffix appended to the group name (CI deployments) |
-| `SecurityGroupDescription` | String | `""` | Description. Leave blank to generate one from the stack name and rule set |
-| `RuleNRuleSet` (N = 1–5) | String | — | Rule set for rule N, or `None` to skip the rule |
-| `RuleNSourceCidr` (N = 1–5) | String | `""` | CIDR block allowed to reach rule N (set this or the security group ID, not both) |
-| `RuleNSourceSecurityGroupId` (N = 1–5) | String | `""` | Security group ID allowed to reach rule N (set this or the CIDR, not both) |
+| `VpcId` | `AWS::EC2::VPC::Id` | — | VPC in which to create the security group (required) |
+| `ProjectName` | String | `proj-ztc` | Project name, the first part of the group name |
+| `Environment` | String | — | Environment: `devl`, `stag`, or `prod` (required) |
+| `SecurityGroupBaseName` | String | — | Base name, the middle part of the group name (required) |
+| `CiSuffix` | String | `""` | Optional suffix appended to the group name, used for CI deployments |
+| `SecurityGroupDescription` | String | `""` | Description. Leave blank to generate `Security group for <stack-name>` |
+| `RuleNRuleSet` (N = 1–5) | String | — | Rule set for rule N. Choose `None` to skip the rule (required) |
+| `RuleNSourceCidr` (N = 1–5) | String | `""` | IPv4 CIDR allowed to reach rule N. Set this or the security group ID, not both |
+| `RuleNSourceSecurityGroupId` (N = 1–5) | String | `""` | Security group ID allowed to reach rule N. Set this or the CIDR, not both |
 
-### Rule Sets
+The console groups these parameters as VPC, name and description, then one group per rule.
 
-Rule N is built from slot N of the rule set chosen for it.
+## Rule Sets
+
+Rule N is built from **slot N** of the rule set you choose for it. Each slot is `protocol, from port, to port`.
 
 | Rule set | Rule 1 | Rule 2 | Rule 3 |
 | ----------- | ------ | ------ | ------ |
+| `None` | — | — | — |
 | `WebServer` | tcp 80 | tcp 443 | — |
 | `SSHOnly` | tcp 22 | — | — |
 | `AppTier` | tcp 8000–8080 | tcp 9090 | — |
 | `Dev` | tcp 22 | tcp 80 | tcp 8000–8080 |
-| `RDSMySQL`, `AuroraMySQL` | tcp 3306 | — | — |
-| `AuroraPostgreSQL`, `RDSPostgreSQL` | tcp 5432 | — | — |
+| `RDSMySQL` | tcp 3306 | — | — |
+| `AuroraMySQL` | tcp 3306 | — | — |
+| `AuroraPostgreSQL` | tcp 5432 | — | — |
+| `RDSPostgreSQL` | tcp 5432 | — | — |
 | `RDSOracle` | tcp 1521 | — | — |
 | `RDSSQLServer` | tcp 1433 | — | — |
 
-Rules 4 and 5 are empty in every set.
+Rules 4 and 5 are unused in every set. Each rule uses only its own slot, so `Rule1RuleSet=WebServer` opens port 80 and nothing else. To also open port 443, set `Rule2RuleSet=WebServer`.
 
-### Naming
+The rule sets are defined in the `IngressRuleSets` mapping in `cloudformation/template.yaml`. To add a set, add an entry there and add its name to the `AllowedValues` of each `RuleNRuleSet` parameter.
 
-The security group is named:
+## Naming
+
+The group name is:
 
 ```bash
-{ProjectName}-{SecurityGroupBaseName}-{Environment}-{Region}
+{ProjectName}-{SecurityGroupBaseName}-{Environment}-{Region}[-{CiSuffix}]
 ```
 
-If `CiSuffix` is set, `-{CiSuffix}` is appended. The `Name` tag uses the same value.
+Example: `proj-ztc-web-devl-us-east-1`
 
-Each ingress rule has a `Description` such as `WebServer rule 1: tcp 80-80 from 10.0.0.0/16`, because ingress rules cannot carry tags in CloudFormation.
+The `Name` tag and the `SecurityGroupName` output use the same value.
 
-### Deploy
+Each ingress rule has a `Description` that shows its rule set, ports, and source, for example `WebServer rule 1: tcp 80-80 from 10.0.0.0/16`. Ingress rules do not support tags in CloudFormation, so the description is the way to label them.
+
+## Outputs
+
+| Output | Description |
+| ------ | ----------- |
+| `SecurityGroupId` | ID of the security group. Exported as `<stack-name>-SecurityGroupId` |
+| `SecurityGroupName` | Name of the security group |
+
+## Usage
+
+### 1. Deploy with the AWS CLI
 
 ```bash
 aws cloudformation deploy \
@@ -75,245 +115,92 @@ aws cloudformation deploy \
     SecurityGroupBaseName=web \
     Rule1RuleSet=WebServer \
     Rule1SourceCidr=10.0.0.0/16 \
-    Rule2RuleSet=WebServer \
-    Rule2SourceCidr=10.0.0.0/16 \
+    Rule2RuleSet=None \
     Rule3RuleSet=None \
     Rule4RuleSet=None \
-    Rule5RuleSet=None
+    Rule5RuleSet=None \
+  --region us-east-1
 ```
 
-Rule 2 must be set to `WebServer` as well to get the HTTPS port, because each rule reads its own slot.
+Rules 2 through 5 are set to `None`, so only rule 1 is created.
 
+### 2. Use as a nested stack
 
----
-
-This repository contains nested CloudFormation templates for deploying S3 buckets with security best practices and optional policy enforcement.
-
-## Overview
-
-This is a **nested stack template** designed to be invoked from a parent/root CloudFormation stack. Templates are stored in this repository and should be uploaded to an S3 bucket for reference by parent stacks.
-
-## Template Files
-
-### CloudFormation Templates
-
-- **`templates/s3-bucket.yaml`** — Nested template for S3 bucket creation (versioning, public access blocking)
-- **`templates/s3-bucket-policy.yaml`** — Optional nested template for S3 bucket policy (encryption enforcement, secure transport)
-
-### Parameter Files
-
-- **`parameters/parameters.json`** — Parameter values for development environment
-
-## Template Features
-
-### S3 Bucket Template (s3-bucket.yaml)
-
-- ✅ Versioning enabled by default
-- ✅ Public Access Blocking
-- ✅ Smart bucket naming (project prefix, account ID, environment, region)
-- ✅ Optional CI suffix support
-
-### S3 Bucket Policy Template (s3-bucket-policy.yaml)
-
-- ✅ Encryption enforcement on uploads
-- ✅ Secure transport enforcement (HTTPS only)
-- ✅ Optional/conditional policy rules
-
-## Parameters
-
-### S3 Bucket Parameters
-
-| Parameter | Type | Default | Description |
-| ----------- | ------ | --------- | ------------- |
-| `ProjectName` | String | — | Project name to use as bucket prefix (required) |
-| `BucketBaseName` | String | `cfn-bucket` | Base name for S3 bucket |
-| `environment` | String | `devl` | Deployment environment (devl, stag, prod) |
-| `CiSuffix` | String | `""` | Optional CI suffix to append to bucket name |
-
-### S3 Bucket Policy Parameters
-
-**Generic (Standalone) Mode:**
-
-| Parameter | Type | Description |
-| ----------- | ------ | ------------- |
-| `BucketName` | String | Direct bucket name (use for any bucket) |
-
-**Integrated Mode (with bucket template):**
-
-| Parameter | Type | Default | Description |
-| ----------- | ------ | --------- | ------------- |
-| `ProjectName` | String | — | Project name (must match bucket template) |
-| `BucketBaseName` | String | `cfn-bucket` | Base name (must match bucket template) |
-| `environment` | String | `devl` | Environment (must match bucket template) |
-| `CiSuffix` | String | `""` | CI suffix (must match bucket template) |
-
-**Usage:** If `BucketName` is provided (non-empty), it takes precedence. Otherwise, the bucket name is constructed from ProjectName/BucketBaseName/environment/CiSuffix.
-
-## Outputs
-
-### S3 Bucket Template Outputs
-
-- `S3BucketName` — S3 bucket name
-- `S3BucketArn` — S3 bucket ARN
-
-### S3 Bucket Policy Template Outputs
-
-- `BucketName` — Bucket name with policy applied
-- `PolicyStatus` — Policy application status (Applied)
-
-## Usage
-
-### 1. Upload Templates to S3
+Upload the template to S3, then reference it from a parent stack:
 
 ```bash
-aws s3 cp templates/s3-bucket.yaml s3://your-cfn-bucket/templates/s3-bucket.yaml
-aws s3 cp templates/s3-bucket-policy.yaml s3://your-cfn-bucket/templates/s3-bucket-policy.yaml
+aws s3 cp cloudformation/template.yaml s3://your-cfn-bucket/templates/security-group.yaml
 ```
-
-### 2. Reference from Parent Stack
-
-In your parent/root CloudFormation template:
 
 ```yaml
-S3BucketNestedStack:
+WebSecurityGroupStack:
   Type: AWS::CloudFormation::Stack
   Properties:
-    TemplateURL: https://s3.amazonaws.com/your-cfn-bucket/templates/s3-bucket.yaml
+    TemplateURL: https://s3.amazonaws.com/your-cfn-bucket/templates/security-group.yaml
     Parameters:
-      ProjectName: !Ref ProjectName
-      BucketBaseName: cfn-bucket
-      environment: !Ref Environment
-      CiSuffix: !Ref CiSuffix
-    Tags:
-      - Key: Environment
-        Value: !Ref Environment
-
-S3PolicyNestedStack:
-  Type: AWS::CloudFormation::Stack
-  DependsOn: S3BucketNestedStack
-  Properties:
-    TemplateURL: https://s3.amazonaws.com/your-cfn-bucket/templates/s3-bucket-policy.yaml
-    Parameters:
-      BucketName: !GetAtt S3BucketNestedStack.Outputs.S3BucketName
-      ProjectName: ""
-      BucketBaseName: cfn-bucket
-      environment: !Ref Environment
-      CiSuffix: !Ref CiSuffix
-    Tags:
-      - Key: Environment
-        Value: !Ref Environment
+      VpcId: !Ref VpcId
+      ProjectName: myproject
+      Environment: devl
+      SecurityGroupBaseName: web
+      Rule1RuleSet: WebServer
+      Rule1SourceSecurityGroupId: !GetAtt AlbSecurityGroup.GroupId
+      Rule2RuleSet: None
+      Rule3RuleSet: None
+      Rule4RuleSet: None
+      Rule5RuleSet: None
 
 Outputs:
-  BucketName:
-    Value: !GetAtt S3BucketNestedStack.Outputs.S3BucketName
-  BucketArn:
-    Value: !GetAtt S3BucketNestedStack.Outputs.S3BucketArn
+  WebSecurityGroupId:
+    Value: !GetAtt WebSecurityGroupStack.Outputs.SecurityGroupId
 ```
 
-### 3. Deploy Using AWS CLI
+### Example: Web tier behind an Application Load Balancer
 
-#### Option A: Deploy Bucket Only
+The ALB's security group accepts HTTP and HTTPS from the internet. The EC2 instances accept HTTP only from the ALB's security group.
 
 ```bash
-# Development (without CI prefix)
-aws cloudformation create-stack \
-  --stack-name cfn-s3-bucket-dev \
-  --template-body file://templates/s3-bucket.yaml \
-  --parameters file://parameters/dev.json
+# ALB security group
+Rule1RuleSet=WebServer
+Rule1SourceCidr=0.0.0.0/0
+Rule2RuleSet=WebServer
+Rule2SourceCidr=0.0.0.0/0
 
-# Staging (without CI prefix)
-aws cloudformation create-stack \
-  --stack-name cfn-s3-bucket-stag \
-  --template-body file://templates/s3-bucket.yaml \
-  --parameters file://parameters/staging.json
-
-# Production (without CI prefix)
-aws cloudformation create-stack \
-  --stack-name cfn-s3-bucket-prod \
-  --template-body file://templates/s3-bucket.yaml \
-  --parameters file://parameters/prod.json
+# EC2 web server security group
+Rule1RuleSet=WebServer
+Rule1SourceSecurityGroupId=sg-<ALB security group ID>
+Rule2RuleSet=None
 ```
 
-#### Option B: Deploy Bucket + Policy (Recommended)
+If the application listens on 8000–8080 or 9090, use `AppTier` instead of `WebServer` for the instances.
+
+## Validation
 
 ```bash
-# Deploy bucket first
-aws cloudformation create-stack \
-  --stack-name cfn-s3-bucket-dev \
-  --template-body file://templates/s3-bucket.yaml \
-  --parameters file://parameters/dev.json
-
-# Wait for bucket to be created
-aws cloudformation wait stack-create-complete --stack-name cfn-s3-bucket-dev
-
-# Get the bucket name from stack outputs
-BUCKET_NAME=$(aws cloudformation describe-stacks \
-  --stack-name cfn-s3-bucket-dev \
-  --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' \
-  --output text)
-
-#### Using Integrated Mode (with bucket template parameters)
-
-```bash
-aws cloudformation create-stack \
-  --stack-name cfn-s3-policy-dev \
-  --template-body file://templates/s3-bucket-policy.yaml \
-  --parameters file://parameters/policy-dev.json
+aws cloudformation validate-template --template-body file://cloudformation/template.yaml
+cfn-lint cloudformation/template.yaml
 ```
 
-#### Using Generic Mode (standalone with direct bucket name)
+Both should pass with no errors or warnings.
 
-```bash
-aws cloudformation create-stack \
-  --stack-name cfn-s3-policy-dev \
-  --template-body file://templates/s3-bucket-policy.yaml \
-  --parameters \
-    ParameterKey=BucketName,ParameterValue=my-existing-bucket \
-    ParameterKey=ProjectName,ParameterValue=""
-```
+## Limitations
 
-#### Option C: Deploy with CI Suffix
+- **No source check per slot.** If a rule has a rule set with a port but no source, the stack creates no ingress entry for that rule and CloudFormation reports no error. The `Rules` section cannot read the mapping, so this check is not possible there.
+- **Only TCP is in the rule sets.** Protocols such as UDP or ICMP need new mapping entries.
+- **Five rules at most.** Each stack creates at most five ingress entries.
 
-```bash
-# Development with CI suffix (e.g., for GitLab CI)
-aws cloudformation create-stack \
-  --stack-name cfn-s3-bucket-dev-ci \
-  --template-body file://templates/s3-bucket.yaml \
-  --parameters \
-    ParameterKey=ProjectName,ParameterValue=myproject \
-    ParameterKey=BucketBaseName,ParameterValue=cfn-bucket \
-    ParameterKey=environment,ParameterValue=devl \
-    ParameterKey=CiSuffix,ParameterValue=$CI_PIPELINE_ID
-```
+## CI and Release
 
-## Bucket Naming Convention
+- **`ci.yaml`** runs on manual dispatch. It loads `cloudformation/stack-config.json` and calls the reusable CI build workflow with the `ci` environment.
+- **`release.yaml`** runs on push to `main`. It runs semantic-release and creates the version tag and GitHub release.
 
-The templates generate bucket names using the following pattern:
+Commits follow the conventional format:
 
-**Without CI Suffix:**
+- `feat:` → MINOR release
+- `fix:` → PATCH release
+- `BREAKING CHANGE:` → MAJOR release
+- `chore:`, `docs:` → no release
 
-```bash
-{ProjectName}-{BucketBaseName}-{AccountId}-{Environment}-{Region}
-```
-
-Example: `myproject-cfn-bucket-123456789012-devl-us-east-1`
-
-**With CI Suffix:**
-
-```bash
-{ProjectName}-{BucketBaseName}-{AccountId}-{Environment}-{Region}-{CiSuffix}
-```
-
-Example: `myproject-cfn-bucket-123456789012-devl-us-east-1-pipeline-12345`
-
-## Best Practices Implemented
-
-- ✅ Versioning enabled by default
-- ✅ Public access blocked by default
-- ✅ Smart bucket naming with project prefix, account ID, environment, and region
-- ✅ Optional CI suffix support for unique deployments
-- ✅ Optional policy enforcement (encryption and secure transport)
-- ✅ Export values for cross-stack references
+Use `npx cz commit` to create a commit in this format.
 
 ## License
 
