@@ -57,7 +57,7 @@ Parameters:
 
   ProjectName:
     Type: String
-    Default: "proj-ztc"
+    Default: "cfn-nested"
     Description: Project name used as the first part of the security group name
     MinLength: 1
     MaxLength: 40
